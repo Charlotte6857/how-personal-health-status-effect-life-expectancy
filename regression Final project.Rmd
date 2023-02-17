@@ -1,0 +1,301 @@
+---
+title: "Final Project"
+author: "Jessie Chen & Jenny Liang"
+date: "4/23/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r data}
+#install.packages("caret")
+#install.packages("zoo")
+#install.packages("car")
+#install.packages("MLmetrics")
+#install.packages("statsr")
+library(caret)
+library(plyr)
+library(dplyr)
+library(zoo)
+library(car)
+library(MLmetrics)
+library(statsr)
+setwd('~/Desktop/regression Project')
+rm(list=ls())
+ls()
+data<-read.table('~/Desktop/regression project/Life Expectancy Data.csv', header=TRUE, sep=",")
+#View(data)
+
+#data cleaning
+summary(data)
+new <- data[-c(1,2)] #drop country and year
+new$Status <- ifelse(new$Status == "Developing",1,0)# convert status into numerical
+table(new$Status)
+#View(new)
+na.aggregate(new)
+NA2mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
+replace(new, TRUE, lapply(new, NA2mean))
+new[] <- lapply(new, NA2mean)
+#View(new)
+#Introduction
+#why we are interested in this dataset? why we regression for this kind of quesiton?(prediction, understand the influence of different variables)
+#research question
+#Does personal health status (BMI, alcohol consumption…) and living environment (GDP, population …) effect life expectancy?
+#Hypothesis:
+# we raised some hypothesis based on our research question,
+#H1: developing countries are expected to have less social welfare than developed countries, and with worse living conditions, people should have lower life expectancies. Life expectancy should then be significantly less in developing countries.
+#H2:Do densely populated countries tend to have lower life expectancy?
+#H3:How does Adult mortality rates affect life expectancy?
+#H4:Does Life Expectancy has positive or negative correlation with  drinking alcohol?
+#H5:What is the impact of schooling on the lifespan of humans?
+#H6:What is the impact of Polio Immunization coverage on life Expectancy?
+#H7:What is the impact of Hepatitis.B Immunization coverage on life Expectancy?
+####
+#Analysis
+
+#Analysis
+
+#full model
+lmod1<-lm(Life.expectancy ~ factor(Status) + Adult.Mortality + infant.deaths +
+    Alcohol + percentage.expenditure + Hepatitis.B + Measles + 
+    BMI + under.five.deaths + Polio + Total.expenditure + Diphtheria + 
+    HIV.AIDS + GDP + Population + thinness..1.19.years + thinness.5.9.years + 
+    Income.composition.of.resources + Schooling , data=new)
+summary(lmod1)
+#plot residual to check homogeneity of variance
+resi1 <- rstudent(lmod1)
+y1 <- fitted(lmod1)
+plot(y1, resi1, xlab="Fitted", ylab="Residuals")
+abline(h=0)
+#diagnostics: residuals are randomly scattered without pattern indicating homogeneous variances,
+#so no variable transformation needed to correct patterns.
+
+#check normality
+qqnorm(scale(resi1), ylab="Residuals")
+qqline(scale(resi1))
+shapiro.test(resi1)
+#diagnostics: the Q-Q plot follows roughly an linear line without obvious deviation overall.
+#The two ends of the plot show signs of light-tailed distribution, 
+#meaning that the model is acceptably normal besides a small amount of outliers.
+
+#check multicollinearity
+car::vif(lmod1)
+#diagnostics: thinness..1.19.years, thinness.5.9.years, 
+#infant.deaths, under.five.deaths, 
+#percentage.expenditure, GDP all have VIF scores over 5.
+#These variables have very high likelihood of having multicollinearity, and thus removed.
+#You might see r-square becoming worse during the steps, but remember multicollinearity makes the model fit unreliable
+
+#remove one by one to see what is affecting what
+lmod1_1<-lm(Life.expectancy ~ factor(Status) + Adult.Mortality + infant.deaths +
+    Alcohol + percentage.expenditure + Hepatitis.B + Measles + 
+    BMI + under.five.deaths + Polio + Total.expenditure + Diphtheria + 
+    HIV.AIDS + GDP + Population + thinness.5.9.years + 
+    Income.composition.of.resources + Schooling, data=new)
+summary(lmod1_1)
+car::vif(lmod1_1) #thinness.5.9.years has become ok, so 1.19 and 5.9 were correlated
+
+lmod1_2<-lm(Life.expectancy ~ factor(Status) + Adult.Mortality +
+    Alcohol + percentage.expenditure + Hepatitis.B + Measles + 
+    BMI + under.five.deaths + Polio + Total.expenditure + Diphtheria + 
+    HIV.AIDS + GDP + Population + thinness.5.9.years + 
+    Income.composition.of.resources + Schooling , data=new)
+summary(lmod1_2) 
+car::vif(lmod1_2) #under.five.deaths has become ok, so infant deaths and under five deaths were correlated
+
+lmod1_3<-lm(Life.expectancy ~ factor(Status) + Adult.Mortality +
+    Alcohol + percentage.expenditure + Hepatitis.B + Measles + 
+    BMI + under.five.deaths + Polio + Total.expenditure + Diphtheria + 
+    HIV.AIDS + Population + thinness.5.9.years + 
+    Income.composition.of.resources + Schooling , data=new)
+summary(lmod1_3) 
+car::vif(lmod1_3) #percentage.expenditure has become ok, so GDP and percentage expenditure were correlated
+
+#repeat assumption checks
+resi1_3 <- rstudent(lmod1_3)
+y1_3 <- fitted(lmod1_3)
+plot(y1_3, resi1_3, xlab="Fitted", ylab="Residuals")
+abline(h=0)
+#still ok
+qqnorm(scale(resi1_3), ylab="Residuals")
+qqline(scale(resi1_3))
+shapiro.test(resi1_3)
+
+#model selection
+step(lmod1_3)
+lmod2<-lm(formula = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Total.expenditure + Diphtheria + HIV.AIDS + Population + 
+    thinness.5.9.years + Income.composition.of.resources + Schooling, 
+    data = new)
+summary(lmod2)
+
+#We want 0.01 significance level, and there are several variables above the 0.01 threshold.
+lmod3<-lm(formula = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, 
+    data = new)
+summary(lmod3)
+
+#repeat assumption checks
+# diagnositics :
+#plot
+# check residual
+resi3<-rstudent(lmod3)
+plot(rstudent(lmod3) ~ lmod3[["fitted.values"]])
+# relatively good
+
+#check normality
+qqnorm(resi3, ylab="Residuals")
+qqline(resi3)
+shapiro.test(resi3)
+
+
+anova(lmod1, lmod3)
+#we compare the lmod3 with the full model,p value is 2.2e-16, meaning there is a significant difference between this two model.
+
+
+
+#Check for outliers.
+n = 2914
+stud <- rstudent(lmod3)
+stud[which.max(abs(stud))]
+abs(qt(.05/(n*2), n-13))# Compute Bonferroni critical value
+which(abs(stud)>abs(qt(.05/(n*2), n-13)))
+new_rm<- new[-c(1112,2282, 2284, 2286), ]
+
+mod_rm <-lm(formula = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, 
+    data = new_rm) #note that the data has changed
+#repeat this process
+n = 2910
+stud <- rstudent(mod_rm)
+stud[which.max(abs(stud))]
+abs(qt(.05/(n*2), n-13))# Compute Bonferroni critical value
+which(abs(stud)>abs(qt(.05/(n*2), n-13)))
+new_rm1<- new_rm[-c(76), ]#76 is now an outlier
+#there are no outliers
+
+mod_rm1 <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, 
+    data = new_rm1) #note that the data has changed
+#repeat this process
+n=2909
+stud <- rstudent(mod_rm1)
+stud[which.max(abs(stud))]
+abs(qt(.05/(n*2), n-13))# Compute Bonferroni critical value
+which(abs(stud)>abs(qt(.05/(n*2), n-13))) #no outliers now
+
+
+summary(lmod3)
+summary(mod_rm1)
+#adjusted r square improved by 0.005
+
+
+#prediction
+x <- model.matrix(mod_rm1)
+x1 <- apply(x,2,mean)
+x1['Status'] <-0
+predict(mod_rm1,new=data.frame(t(x1)),interval="confidence",level=.95)
+#The life expectancy with average Adult.Mortality,percentage.expenditure,Hepatitis.B,Measles + BMI,under.five.deaths,Polio, Diphtheria, HIV.AIDS ,Income.composition.of.resources,Schooling for developed is 70.86397 with an appropriate 95% CI (70.44479 71.28316)
+
+x <- model.matrix(mod_rm1)
+x1 <- apply(x,2,mean)
+x1['Status'] <-1
+predict(mod_rm1,new=data.frame(t(x1)),interval="confidence",level=.95)
+#The life expectancy with average Adult.Mortality,percentage.expenditure,Hepatitis.B,Measles + BMI,under.five.deaths,Polio, Diphtheria, HIV.AIDS ,Income.composition.of.resources,Schooling for developing is 69.00358 with an appropriate 95% CI (68.83373 69.17344)
+
+#The prediction of the model for both developing and developed countries is pretty good, the error is restricted in half a year, while it is even better for developing countries that the error is restriected in 0.2 years. It can be say that this would be a good model to predict for life expectancy in the future.
+
+
+##hypothesis1
+#Ho: developing countries have no difference in life expectancies compare with developped countries.
+#H1: developing countries are expected to have less social welfare than developed countries, and with worse living conditions, people should have lower life expectancies. Life expectancy should then be significantly less in developing countries.
+# In model summary the countries with developing status (indicated by factor(Status)1) has significant difference in comparison with countries with developed status (the default comparison) with p-value of 2.47e-14. By comparing the two, the model estimates that people in developing countries has 1.860 less years of life-expectancy. Therefore, we reject Ho, and accept H1, in that people in developing countries 
+
+##hypothesis2
+#Ho:Population of countries has no significant effect on life expectancy.
+#H2:Population of countries has significant effect on life expectancy.
+#During anova comparison with 0.01 signficance level, the population variable is removed from the model for having mroe than 0.01 p-value. Population is said to have no significant effect on life expectancy. Therefore, we accept Ho.
+
+##hypothesis3
+#Ho:Adult mortality rates has no significant effect on life expectancy.
+#H3:Adult mortality rates has significant effect on life expectancy.
+#In model summary, adult mortality between 15-60 years old per 1000 people has significant effect over the life expectancy with p-value of < 2e-16. According to the estimate, for every 100 increase in mortality per 1000 people, the life expectancy decreases by 1.975 years.Therefore, the H0 is rejected, and H3 accepted, have more adulty mortality associating with less life expectancy.
+
+##hypothesis4
+#Ho: Drinking alcohol has no significant effect on life expectancy.
+#H4: Drinking alcohol has significant effect on life expectancy.
+# During step wise selection, the alcohol variable is removed from the model.Alcohol is said to have no significant effect on life expectancy. Therefore, we accept Ho. 
+
+##hypothesis5
+#Ho: schoolingl has no significant effect on life expectancy.
+#H5: schooling has significant effect on life expectancy.
+mod_rm1 <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, 
+    data = new_rm1)
+
+mod_noschool <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources, 
+    data = new_rm1)
+
+anova(mod_rm1, mod_noschool)
+#the p value from the anova model is 2.2e-16, meaning there is a significant difference between model with schooling and without schooling. According to the summary of our final model,for every 10 extra years of education the people receive, the life expectancy increases by 7.084 years. Therefore, the H0 is rejected, and H5 accepted, have more schooling associating with more life expectancy.
+
+##hypothesis6
+#Ho: Polio Immunization coverage has no significant effect on life expectancy.
+#H6: Polio Immunization coverage has significant effect on life expectancy.
+mod_rm1 <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, 
+    data = new_rm1)
+
+mod_nopolio <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Diphtheria + HIV.AIDS + Income.composition.of.resources, 
+    data = new_rm1)
+
+anova(mod_rm1, mod_nopolio)
+#the p value from the anova model is 2.2e-16, meaning there is a significant difference between model with Polio Immunization coverage and without Polio Immunization coverage. According to the summary of our final model,for every 100 increase in Polio Immunization coverage per 100 people, the life expectancy increase by 3.130 years.Therefore, the H0 is rejected, and H6 accepted, have more Polio Immunization coverage associating with more life expectancy.
+
+##hypothesis7
+#Ho: Hepatitis.B Immunization coverage Immunization coverage has no significant effect on life expectancy.
+#H7: Hepatitis.B Immunization coverage has significant effect on life expectancy.
+mod_rm1 <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Hepatitis.B + Measles + BMI + under.five.deaths + 
+    Polio + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, 
+    data = new_rm1)
+
+mod_noHepatitis.B <-lm(formula  = Life.expectancy ~ factor(Status) + Adult.Mortality + 
+    percentage.expenditure + Measles + BMI + under.five.deaths + 
+    Diphtheria + HIV.AIDS + Income.composition.of.resources, 
+    data = new_rm1)
+
+anova(mod_rm1, mod_noHepatitis.B )
+#the p value from the anova model is 2.2e-16, meaning there is a significant difference between model with Hepatitis.BImmunization coverage and without Hepatitis.B Immunization coverage. According to the summary of our final model,for every 100 increase in Hepatitis.B Immunization coverage per 100 people, the life expectancy decrease by 1.976 years.Therefore, the H0 is rejected, and H7 accepted, have more Hepatitis.B Immunization coverage associating with less life expectancy. This is a surprise finding because it contracdicts with our commonsense. This is probrably due to the quality of the vaccine of even the side effect of the vaccine, and could be a very interested point for future studies.
+
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
